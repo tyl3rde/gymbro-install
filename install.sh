@@ -21,7 +21,8 @@
 set -euo pipefail
 
 APP_DIR="/opt/gymbro"
-DEFAULT_IMAGE="ghcr.io/tyl3rde/gymbro:latest"
+IMAGE_REPO="ghcr.io/tyl3rde/gymbro"
+DEFAULT_IMAGE="$IMAGE_REPO:latest"
 # Von hier kommen docker-compose.yml und Caddyfile, wenn der Installer nicht
 # aus einem Checkout läuft (curl … | sudo bash). Das öffentliche Repo zieht
 # die Release-Pipeline bei jedem stabilen Release nach; das App-Repo selbst
@@ -80,6 +81,57 @@ fetch_release_files() {
     || die "Die geladene docker-compose.yml sieht nicht nach einer Compose-Datei aus."
 }
 
+# Tags des Images aus GHCR, anonym (das Package ist öffentlich). Nur curl,
+# sed und grep: Auf einem minimalen Debian gibt es weder jq noch python.
+registry_tags() {
+  local token
+  token="$(curl -fsS --max-time 10 "https://ghcr.io/token?scope=repository:tyl3rde/gymbro:pull&service=ghcr.io" \
+    | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
+  [ -n "$token" ] || return 1
+  curl -fsS --max-time 10 -H "Authorization: Bearer $token" \
+    "https://ghcr.io/v2/tyl3rde/gymbro/tags/list?n=1000" | grep -o '"[0-9][^"]*"' | tr -d '"'
+}
+
+# Stabil (latest) oder Beta (neuester Prerelease)? Setzt GYMBRO_IMAGE.
+# Portabel bis Bash 3.2 gehalten, damit tests/install-sh.test.js die
+# Auswahl auch auf einem Mac durchspielen kann.
+choose_image() {
+  # Von außen gesetzt (curl … | sudo GYMBRO_IMAGE=…:1.2.0 bash): keine Frage.
+  if [ -n "${GYMBRO_IMAGE:-}" ]; then
+    ok "Image aus GYMBRO_IMAGE: $GYMBRO_IMAGE"
+    return 0
+  fi
+  local tags stable beta base answer
+  tags="$(registry_tags 2>/dev/null || true)"
+  stable="$(printf '%s\n' "$tags" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
+  beta="$(printf '%s\n' "$tags" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+-' | sort -V | tail -1 || true)"
+  # Eine Beta nur anbieten, wenn ihre Version NEUER ist als die letzte
+  # stabile. sort -V sortiert 1.3.0-rc.4 hinter 1.3.0 — nach dem stabilen
+  # Release wäre der alte Testkandidat sonst weiter die "Beta".
+  if [ -n "$beta" ] && [ -n "$stable" ]; then
+    base="${beta%%-*}"
+    if [ "$base" = "$stable" ] || [ "$(printf '%s\n%s\n' "$stable" "$base" | sort -V | tail -1)" = "$stable" ]; then
+      beta=""
+    fi
+  fi
+  GYMBRO_IMAGE="$DEFAULT_IMAGE"
+  if [ -z "$tags" ]; then
+    warn "Versionsliste von GHCR nicht abrufbar — nehme die stabile Version."
+  elif [ -z "$beta" ]; then
+    ok "Version: stabil${stable:+ ($stable)}, Updates per Klick in der App."
+  else
+    echo
+    echo "  Stabil: ${stable:-?} — empfohlen, Updates per Klick in der App"
+    echo "  Beta:   $beta — neuester Testkandidat, kann Fehler haben."
+    echo "          Feste Version: kein Update per Klick, Wechsel später von Hand."
+    read -rp "Beta installieren? [j/N] " answer || answer=""
+    case "$answer" in
+      [jJ]*) GYMBRO_IMAGE="$IMAGE_REPO:$beta" ;;
+    esac
+  fi
+  ok "Image: $GYMBRO_IMAGE"
+}
+
 # Alles Weitere steckt in main(), aufgerufen erst in der letzten Zeile. Bei
 # `curl … | sudo bash` liest bash das Skript aus der Pipe: So ist es komplett
 # gelesen, bevor irgendetwas läuft (ein abgebrochener Download führt nichts
@@ -117,8 +169,7 @@ while :; do
   [ "$ADMIN_PIN" = "$ADMIN_PIN2" ] || { warn "PINs stimmen nicht überein."; continue; }
   break
 done
-read -rp "Docker-Image [$DEFAULT_IMAGE]: " GYMBRO_IMAGE
-GYMBRO_IMAGE="${GYMBRO_IMAGE:-$DEFAULT_IMAGE}"
+choose_image
 
 # ── 3. DNS-Vorabcheck (nur Warnung, kein Abbruch) ────────────────────────────
 SERVER_IP="$(curl -fsS4 --max-time 10 https://ifconfig.me 2>/dev/null || true)"

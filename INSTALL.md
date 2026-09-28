@@ -39,8 +39,12 @@ Der Installer liegt öffentlich in
 bei jedem stabilen Release aus dem App-Repo nachgezogen. Mit Zugang zum
 App-Repo geht auch `git clone` und dann `sudo ./install.sh` im Checkout.
 
-Das Skript fragt Domain, E-Mail (Let's Encrypt), Admin-Name, Admin-PIN und das
-Image (Enter = `latest`, die aktuelle stabile Version). Dann erledigt es:
+Das Skript fragt Domain, E-Mail (Let's Encrypt), Admin-Name und Admin-PIN.
+Gibt es eine Testversion, die neuer ist als die letzte stabile, fragt es
+außerdem „Beta installieren? [j/N]" — Enter nimmt die stabile Version
+(`latest`, Updates per Klick), `j` den neuesten Prerelease als feste Version.
+Eine bestimmte Version ohne Frage: `curl … | sudo GYMBRO_IMAGE=ghcr.io/tyl3rde/gymbro:1.1.3 bash`.
+Dann erledigt es:
 
 1. Docker installieren (falls nicht vorhanden)
 2. Secrets erzeugen (Session, PIN-Pepper, Cron) **und ein VAPID-Keypair** für

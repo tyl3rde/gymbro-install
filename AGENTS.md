@@ -7,9 +7,9 @@ der App liegt in einem privaten Repo, das fertige Image ist öffentlich:
 
 ## Der Installer in einem Satz
 
-`install.sh` richtet auf einem **frischen** Server Docker ein, fragt fünf
-Dinge ab, schreibt `/opt/gymbro`, startet vier Container und legt den ersten
-Admin an:
+`install.sh` richtet auf einem **frischen** Server Docker ein, stellt ein
+paar Fragen, schreibt `/opt/gymbro`, startet vier Container und legt den
+ersten Admin an:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tyl3rde/gymbro-install/main/install.sh | sudo bash
@@ -51,7 +51,13 @@ In dieser Reihenfolge, alle über das Terminal:
 2. **E-Mail für Let's Encrypt** (muss ein `@` enthalten)
 3. **Name des Admin-Accounts** (1–30 Zeichen)
 4. **PIN für den Admin**, zweimal (genau 4 Ziffern, verdeckte Eingabe)
-5. **Docker-Image**, Enter = `ghcr.io/tyl3rde/gymbro:latest`
+5. **Beta installieren? [j/N]** — nur, wenn es einen Prerelease gibt, der
+   neuer ist als die letzte stabile Version. Enter = stabil
+   (`ghcr.io/tyl3rde/gymbro:latest`, Updates per Klick), `j` = der neueste
+   Prerelease als feste Version (kein Update per Klick). Die Versionen liest
+   der Installer anonym aus GHCR; klappt das nicht, nimmt er stabil.
+   Soll eine bestimmte Version ohne Frage installiert werden:
+   `curl … | sudo GYMBRO_IMAGE=ghcr.io/tyl3rde/gymbro:<version> bash`
 6. **Firewall (ufw)** einrichten? Auf einem frischen Server Vorauswahl „Ja",
    sonst „Nein"
 

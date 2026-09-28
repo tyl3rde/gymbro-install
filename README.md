@@ -9,8 +9,10 @@ curl -fsSL https://raw.githubusercontent.com/tyl3rde/gymbro-install/main/install
 ```
 
 Der Installer richtet Docker ein und fragt dann nach Domain, E-Mail für
-Let's Encrypt, Admin-Name, Admin-PIN und Image. Nach etwa fünf Minuten läuft
-die App unter `https://<deine-domain>`.
+Let's Encrypt, Admin-Name und Admin-PIN. Gibt es eine neuere Testversion,
+fragt er zusätzlich, ob er statt der stabilen Version die Beta nehmen soll
+(Enter = stabil). Nach etwa fünf Minuten läuft die App unter
+`https://<deine-domain>`.
 
 ## Voraussetzungen
 
