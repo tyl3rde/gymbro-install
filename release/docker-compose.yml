@@ -1,0 +1,165 @@
+# Release-Deployment: zieht das fertige Multi-Arch-Image von GHCR statt lokal
+# zu bauen — läuft dadurch auch auf kleinen VPS (1–2 GB RAM) und ist in
+# Sekunden aktualisiert (docker compose pull && up -d).
+#
+# Unterschiede zum Entwickler-/Pi-Compose im Repo-Root:
+#   - image: statt build: (kein pnpm/next build auf dem Server)
+#   - Caddy als offizielles Image ohne Cloudflare-Plugin (TLS via HTTP-01,
+#     braucht nur einen A-Record auf die Server-IP und offene Ports 80+443)
+#   - cron-Sidecar statt systemd-Timer (stündlicher Reminder-Tick)
+#   - App-Port wird GAR NICHT veröffentlicht — nur Caddy und der Sidecar
+#     erreichen die App übers Compose-Netz. Niemand kann an Caddy vorbei
+#     (wichtig: der Login-Rate-Limit vertraut X-Forwarded-For von Caddy).
+
+# Fester Projektname — WICHTIG, nicht entfernen: Der updater-Sidecar ruft
+# `docker compose` aus seinem eigenen Container heraus auf. Ohne festen Namen
+# würde Compose den Projektnamen aus dem jeweiligen Arbeitsverzeichnis ableiten
+# (Host: "gymbro", Sidecar: "workdir") — der Sidecar würde dann beim Update
+# NEUE Container neben den laufenden hochziehen statt sie zu ersetzen.
+name: gymbro
+
+# Log-Rotation für alle Container (#48). Der Standardtreiber json-file hat
+# kein Größenlimit — cloudflared und Caddy loggen dauerhaft und würden über
+# Monate die SD-Karte bzw. Platte füllen, falls auf dem Host keine
+# daemon.json-Limits gesetzt sind. "local" rotiert und komprimiert;
+# `docker compose logs` funktioniert damit unverändert.
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  wheres-gymbro:
+    image: ${GYMBRO_IMAGE:-ghcr.io/tyl3rde/gymbro:latest}
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      - NODE_ENV=production
+      - SESSION_SECRET=${SESSION_SECRET}
+      - PIN_PEPPER=${PIN_PEPPER}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_EMAIL=${VAPID_EMAIL}
+      - CRON_SECRET=${CRON_SECRET}
+      - ADMIN_USER_ID=${ADMIN_USER_ID:-gymbro_admin}
+      # Wer zusätzlich die Analytics lesen darf (komma-getrennte User-IDs),
+      # ohne Admin zu sein. Leer = nur der Admin.
+      - ANALYTICS_USER_IDS=${ANALYTICS_USER_IDS:-}
+      # Update-Check: prüft 1×/Tag die GitHub-Releases und zeigt Admins einen
+      # Hinweis. Installiert NIE von selbst. "off" schaltet ihn hart ab
+      # (in der App zusätzlich per Schalter auf /admin abschaltbar).
+      - UPDATE_CHECK=${UPDATE_CHECK:-on}
+      - UPDATE_REPO=${UPDATE_REPO:-tyl3rde/gymbro}
+      # Optionales PAT (Lesezugriff), damit der Release-Check auch bei
+      # privatem Repo funktioniert. Leer = nur öffentliche Releases sichtbar.
+      - UPDATE_TOKEN=${UPDATE_TOKEN:-}
+      # Sagt der UI, ob der Updater-Sidecar läuft (One-Click-Button sichtbar).
+      - UPDATER_ENABLED=${UPDATER_ENABLED:-true}
+      # Das eigene Image-Tag: nur so erkennt die App, ob sie auf einer FESTEN
+      # Version läuft — dann wäre One-Click wirkungslos (der Updater zöge
+      # denselben Stand) und die UI erklärt stattdessen den manuellen Weg.
+      - GYMBRO_IMAGE=${GYMBRO_IMAGE:-ghcr.io/tyl3rde/gymbro:latest}
+    volumes:
+      # ABSOLUT, nicht ./data — siehe Kommentar beim updater.
+      - ${GYMBRO_DIR:-/opt/gymbro}/data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      - APP_DOMAIN=${APP_DOMAIN}
+      - ACME_EMAIL=${ACME_EMAIL}
+    volumes:
+      - ${GYMBRO_DIR:-/opt/gymbro}/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - wheres-gymbro
+
+  # Stündlicher Tick für Reminder-Pushes, Anklage-Verurteilungen, Auto-Close
+  # und das tägliche DB-Backup. Jede Aufgabe gated sich selbst (Stundenfenster
+  # + Dedupe pro Tag) — stündliches Aufrufen ist gewollt und idempotent.
+  cron:
+    image: curlimages/curl:8.11.1
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      - CRON_SECRET=${CRON_SECRET}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while :; do
+          sleep 3600
+          curl -fsS -m 60 -H "x-cron-secret: $${CRON_SECRET}" \
+            -X POST http://wheres-gymbro:3000/api/cron/reminders \
+            || echo "[cron] reminder tick failed (App noch nicht bereit?)"
+        done
+    depends_on:
+      - wheres-gymbro
+
+  # ── One-Click-Update-Helfer ────────────────────────────────────────────
+  # Wartet auf die Trigger-Datei data/updater/update-requested, die die App
+  # schreibt, wenn ein Admin im UI auf „Jetzt installieren" klickt. Danach:
+  # Image ziehen, Container neu starten, Trigger löschen.
+  #
+  # ⚠️ Dieser Container hat den Docker-Socket gemountet — das entspricht
+  # Root-Rechten auf dem Host. Deshalb:
+  #   * Er ist der EINZIGE Container mit Socket-Zugriff (die App selbst hat
+  #     keinen und kann nur eine Datei schreiben).
+  #   * Er führt nur pull/up aus, nichts aus der Trigger-Datei.
+  #   * Wer das nicht will: Service löschen und UPDATER_ENABLED=false setzen —
+  #     der Update-HINWEIS funktioniert weiter, das Einspielen läuft dann
+  #     manuell per SSH (docker compose pull && up -d).
+  #
+  # ‼️ ALLE Bind-Mounts hier und beim App-Service sind ABSOLUT (GYMBRO_DIR),
+  # niemals relativ. Grund: Der Sidecar ruft `docker compose` aus /workdir auf.
+  # Compose löst relative Pfade gegen SEIN Arbeitsverzeichnis auf — aus ./data
+  # wurde /workdir/data, Docker legte ein LEERES Verzeichnis an und hängte es
+  # als /app/data ein. Das Update hat damit die Datenbank abgehängt: die App
+  # kam mit SQLITE_CANTOPEN hoch, die echten Daten lagen unberührt daneben.
+  # (Gefunden beim Test des Release-Updates, 2026-07-28.)
+  updater:
+    image: docker:27-cli
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${GYMBRO_DIR:-/opt/gymbro}/data/updater:/trigger
+      - ${GYMBRO_DIR:-/opt/gymbro}:/workdir:ro
+      # Registry-Login des Hosts (docker login ghcr.io), read-only: ohne ihn
+      # könnte der Sidecar ein PRIVATES GHCR-Package nicht pullen — die
+      # Credentials liegen beim Compose-CLI-Client, nicht im Docker-Daemon.
+      - ${DOCKER_CONFIG_DIR:-/root/.docker}:/root/.docker:ro
+    working_dir: /workdir
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "[updater] bereit — warte auf Update-Anfragen"
+        while :; do
+          if [ -f /trigger/update-requested ]; then
+            echo "[updater] Anfrage erkannt ($(cat /trigger/update-requested 2>/dev/null))"
+            rm -f /trigger/update-requested
+            docker compose pull wheres-gymbro \
+              && docker compose up -d wheres-gymbro \
+              && echo "[updater] ✓ Update eingespielt" \
+              || echo "[updater] ✗ Update fehlgeschlagen"
+          fi
+          sleep 15
+        done
+
+volumes:
+  caddy_data:
+  caddy_config:

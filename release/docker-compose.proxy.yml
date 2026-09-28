@@ -1,0 +1,131 @@
+# Variante für Server, auf denen SCHON ein Reverse-Proxy läuft (Issue #3).
+#
+# Unterschied zu release/docker-compose.yml:
+#   - kein caddy-Service (die Ports 80/443 gehören dem vorhandenen Proxy)
+#   - die App hängt zusätzlich in einem EXTERNEN Docker-Network, über das der
+#     Proxy sie erreicht
+#   - fester container_name, damit die Proxy-Konfiguration einen stabilen
+#     Hostnamen hat
+#
+# Benutzung: diese Datei als /opt/gymbro/docker-compose.yml ablegen (nicht
+# unter ihrem eigenen Namen lassen — der updater-Sidecar ruft `docker compose`
+# ohne -f auf und würde sie sonst nicht finden). Details: INSTALL.md.
+#
+# ‼️ KEIN `ports:` beim App-Service — und das ist nicht Kosmetik:
+# Der Brute-Force-Schutz beim Login zählt Fehlversuche pro IP und nimmt die IP
+# aus X-Forwarded-For, weil davor immer ein Proxy steht. Wird die App direkt
+# veröffentlicht, kann jeder diesen Header fälschen und Lockout wie IP-Bann
+# aushebeln. Die App darf ausschließlich über den Proxy erreichbar sein.
+
+# Fester Projektname — nicht entfernen: der updater-Sidecar ruft `docker
+# compose` aus seinem eigenen Arbeitsverzeichnis auf und würde sonst neue
+# Container neben die laufenden stellen statt sie zu ersetzen.
+name: gymbro
+
+# Log-Rotation für alle Container (#48). Der Standardtreiber json-file hat
+# kein Größenlimit — cloudflared und Caddy loggen dauerhaft und würden über
+# Monate die SD-Karte bzw. Platte füllen, falls auf dem Host keine
+# daemon.json-Limits gesetzt sind. "local" rotiert und komprimiert;
+# `docker compose logs` funktioniert damit unverändert.
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  wheres-gymbro:
+    image: ${GYMBRO_IMAGE:-ghcr.io/tyl3rde/gymbro:latest}
+    container_name: gymbro-app
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      - NODE_ENV=production
+      - SESSION_SECRET=${SESSION_SECRET}
+      - PIN_PEPPER=${PIN_PEPPER}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_EMAIL=${VAPID_EMAIL}
+      - CRON_SECRET=${CRON_SECRET}
+      - ADMIN_USER_ID=${ADMIN_USER_ID:-gymbro_admin}
+      # Wer zusätzlich die Analytics lesen darf (komma-getrennte User-IDs),
+      # ohne Admin zu sein. Leer = nur der Admin.
+      - ANALYTICS_USER_IDS=${ANALYTICS_USER_IDS:-}
+      - UPDATE_CHECK=${UPDATE_CHECK:-on}
+      - UPDATE_REPO=${UPDATE_REPO:-tyl3rde/gymbro}
+      - UPDATE_TOKEN=${UPDATE_TOKEN:-}
+      - UPDATER_ENABLED=${UPDATER_ENABLED:-true}
+      - GYMBRO_IMAGE=${GYMBRO_IMAGE:-ghcr.io/tyl3rde/gymbro:latest}
+    volumes:
+      # ABSOLUT, nicht ./data — siehe Kommentar beim updater.
+      - ${GYMBRO_DIR:-/opt/gymbro}/data:/app/data
+    networks:
+      # default = projekt-internes Netz, darüber erreichen cron und updater die
+      # App per Servicename. proxy = das bestehende Netz des Reverse-Proxy.
+      - default
+      - proxy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Stündlicher Tick: Reminder-Pushes, Anklage-Verurteilungen, Auto-Close und
+  # das tägliche DB-Backup. Jede Aufgabe gated sich selbst, stündlich ist gewollt.
+  cron:
+    image: curlimages/curl:8.11.1
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      - CRON_SECRET=${CRON_SECRET}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while :; do
+          sleep 3600
+          curl -fsS -m 60 -H "x-cron-secret: $${CRON_SECRET}" \
+            -X POST http://wheres-gymbro:3000/api/cron/reminders \
+            || echo "[cron] reminder tick failed (App noch nicht bereit?)"
+        done
+    depends_on:
+      - wheres-gymbro
+
+  # One-Click-Update-Helfer. Hat den Docker-Socket (= Root auf dem Host) und
+  # wird nur aktiv, wenn die App auf Admin-Klick eine Trigger-Datei schreibt.
+  # Wer das nicht will: Service löschen und UPDATER_ENABLED=false setzen.
+  updater:
+    image: docker:27-cli
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${GYMBRO_DIR:-/opt/gymbro}/data/updater:/trigger
+      - ${GYMBRO_DIR:-/opt/gymbro}:/workdir:ro
+      - ${DOCKER_CONFIG_DIR:-/root/.docker}:/root/.docker:ro
+    working_dir: /workdir
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "[updater] bereit — warte auf Update-Anfragen"
+        while :; do
+          if [ -f /trigger/update-requested ]; then
+            echo "[updater] Anfrage erkannt ($(cat /trigger/update-requested 2>/dev/null))"
+            rm -f /trigger/update-requested
+            docker compose pull wheres-gymbro \
+              && docker compose up -d wheres-gymbro \
+              && echo "[updater] ✓ Update eingespielt" \
+              || echo "[updater] ✗ Update fehlgeschlagen"
+          fi
+          sleep 15
+        done
+    depends_on:
+      - wheres-gymbro
+
+networks:
+  # Muss bereits existieren (der Proxy hängt darin). Name per PROXY_NETWORK in
+  # der .env anpassbar; anlegen ginge mit: docker network create web
+  proxy:
+    name: ${PROXY_NETWORK:-web}
+    external: true
