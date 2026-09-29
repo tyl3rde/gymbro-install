@@ -10,7 +10,11 @@ Skript, ~5 Minuten.
   Image ist fertig). Empfohlen 4 GB, damit Platz für Backups bleibt.
 - **Dedizierte IPv4** und eine **Domain/Subdomain**, deren A-Record
   (optional AAAA) **schon auf den Server zeigt** — sonst gibt es kein
-  TLS-Zertifikat. Bei Cloudflare: Proxy auf „DNS only" (graue Wolke).
+  TLS-Zertifikat. Bei Cloudflare: Proxy auf „DNS only" (graue Wolke),
+  und das auch später so lassen. Mit Proxy (orange Wolke) oder einem
+  anderen CDN davor sieht die App statt echter Adressen nur die des CDN.
+  Der IP-Bann beim Login sperrt dann nach 30 Fehlversuchen alle Nutzer auf
+  einmal statt nur den einen.
 - **Ports 80 und 443** von außen erreichbar.
 - Root-/sudo-Zugang per SSH.
 
@@ -129,6 +133,14 @@ Setup **dein** Proxy — übernimm sie aus `release/Caddyfile`, sonst fehlen sie
 > weil davor immer ein Proxy steht. Wird die App direkt veröffentlicht, kann
 > jeder diesen Header fälschen und damit Lockout und IP-Bann aushebeln. Sie
 > darf ausschließlich über den Proxy erreichbar sein.
+>
+> Dein Proxy muss `X-Forwarded-For` setzen. Anhängen wie bei nginx
+> (`$proxy_add_x_forwarded_for`) ist in Ordnung: Die App liest den Header
+> von rechts und überspringt Adressen aus privaten Netzen, ein vom Client
+> vorangestellter Eintrag zählt also nicht. `X-Real-IP` nutzt sie nur, wenn
+> `X-Forwarded-For` ganz fehlt. Steht vor deinem Proxy noch ein CDN, muss
+> der Proxy dessen Adressen vertrauen und die echte Client-IP weiterreichen,
+> sonst teilen sich alle Nutzer die Adressen des CDN (siehe Voraussetzungen).
 
 Beim Update-Knopf ändert sich nichts: Der `updater`-Sidecar liegt in dieser
 Variante genauso bei und aktualisiert nur den App-Container — der Proxy bleibt

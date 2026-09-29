@@ -138,6 +138,10 @@ Admins ungültig.
 - Den App-Container nie direkt mit `ports:` veröffentlichen. Der Login-Schutz
   zählt Fehlversuche pro IP aus `X-Forwarded-For` und verlässt sich darauf,
   dass immer ein Proxy davor steht.
+- Kein CDN vorschalten, auch nicht nachträglich die orange Wolke bei
+  Cloudflare. Caddy ist als einziger Hop vor der App konfiguriert und sähe
+  dann nur Edge-Adressen: Alle Nutzer teilten sich eine Handvoll IPs, und
+  der IP-Bann beim Login sperrte die ganze Instanz auf einmal.
 - `/opt/gymbro/data` nie löschen oder mit `rsync --delete` überschreiben, ohne
   vorher ein Backup zu haben — dort liegen alle Daten der Nutzer.
 - Die `.env` nicht neu erzeugen, wenn schon Nutzer existieren: Ein neuer

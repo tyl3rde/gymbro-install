@@ -21,5 +21,12 @@
     -Server
   }
 
+  # ‼️ Kein trusted_proxies, mit Absicht: Caddy hängt hier direkt am Netz
+  # und ist der EINZIGE Hop vor der App. Mitgeschickte X-Forwarded-* verwirft
+  # es und setzt die echte Gegenstelle — darauf baut der Login-Schutz
+  # (lib/client-ip.js). Kommt ein CDN davor (Cloudflare-Proxy, orange Wolke),
+  # sieht die App nur noch dessen Edge-Adressen, und der IP-Bann sperrt die
+  # ganze Crew auf einmal (Issue #10). Dann gehören die IP-Bereiche des CDN
+  # als trusted_proxies samt trusted_proxies_strict in den globalen Block.
   reverse_proxy wheres-gymbro:3000
 }
