@@ -46,7 +46,10 @@ App-Repo geht auch `git clone` und dann `sudo ./install.sh` im Checkout.
 Das Skript fragt Domain, E-Mail (Let's Encrypt), Admin-Name und Admin-PIN.
 Gibt es eine Testversion, die neuer ist als die letzte stabile, fragt es
 außerdem „Beta installieren? [j/N]" — Enter nimmt die stabile Version
-(`latest`, Updates per Klick), `j` den neuesten Prerelease als feste Version.
+(`latest`, Updates per Klick), `j` den Beta-Kanal (`…:beta`, neueste Version
+inklusive Testversionen) mit eingeschaltetem Prerelease-Schalter: Auch die
+nächsten Betas kommen dann per Klick. Abschalten lässt sich das auf `/admin`
+(siehe [Updates](#updates)).
 Eine bestimmte Version ohne Frage: `curl … | sudo GYMBRO_IMAGE=ghcr.io/tyl3rde/gymbro:1.1.3 bash`.
 Dann erledigt es:
 
@@ -61,6 +64,15 @@ Dann erledigt es:
 
 Danach: einloggen, und unter **Einstellungen → Nutzerverwaltung** die übrigen
 Leute anlegen (jeder bekommt eine 4-stellige PIN).
+
+**Vier Features sind nach der Installation aus:** Split-Sync,
+Apple-Kurzbefehl, API-Zugriff und Krankschreibungen. Wer sie haben will,
+schaltet sie als Admin unter **Einstellungen → Analytics (`/admin`) →
+Features** ein. Den Apple-Kurzbefehl legt dann jeder selbst an, die
+Anleitung mit der passenden Adresse steht in den Einstellungen. Eine fertige
+Kurzbefehl-Datei gibt es nicht, weil sie an eine einzige Adresse gebunden
+wäre. Instanzen, die vor 1.5.0 installiert wurden, behalten beim Update
+ihren bisherigen Stand.
 
 > Das Image ist **öffentlich** — für die Installation ist keine Anmeldung bei
 > GHCR nötig. Nur falls das Package einmal privat gestellt wird, braucht der
@@ -112,7 +124,7 @@ sudo docker compose up -d
 sudo docker compose exec -T wheres-gymbro wget -qO /dev/null http://127.0.0.1:3000/login
 # PIN verdeckt abfragen und per stdin übergeben — als Argument wäre sie in `ps`
 # sichtbar. (Ältere Images kennen nur die Form mit der PIN als 2. Argument.)
-read -rsp "Admin-PIN: " PIN; echo
+read -rsp "Admin-PIN (4 Ziffern): " PIN; echo
 printf '%s\n' "$PIN" | sudo docker compose exec -T wheres-gymbro node scripts/bootstrap-admin.mjs "<Name>"; unset PIN
 ```
 
@@ -125,8 +137,10 @@ gymbro.example.de {
 }
 ```
 
-Die Sicherheits-Header (CSP, HSTS, `X-Frame-Options`, …) liefert in diesem
-Setup **dein** Proxy — übernimm sie aus `release/Caddyfile`, sonst fehlen sie.
+Die Sicherheits-Header (CSP, HSTS, `X-Frame-Options`, …) setzt die App
+selbst. Setz sie in deinem Proxy **nicht** noch einmal: Doppelt angekommen,
+gelten bei der CSP beide Richtlinien gleichzeitig, und eine eigene Kopie
+bricht die App, sobald sich ihre Richtlinie mit einem Update ändert.
 
 > ‼️ **Der App-Service darf kein `ports:` bekommen.** Der Brute-Force-Schutz
 > beim Login zählt Fehlversuche pro IP und liest die IP aus `X-Forwarded-For`,
@@ -188,6 +202,19 @@ möchte: den `updater`-Service aus `docker-compose.yml` löschen und
 `UPDATER_ENABLED=false` setzen — der Hinweis bleibt, das Einspielen läuft dann
 per SSH (`docker compose pull && up -d`).
 
+**Prerelease-Versionen** (Testversionen, Release Candidates): Standard aus.
+Mit dem Schalter „Prerelease-Versionen" bei „Updates" auf `/admin` bietet der
+Check auch sie an. Beim Klick auf „Installieren" stellt der Updater
+`GYMBRO_IMAGE` in der `.env` auf `…/gymbro:beta` um. Dieses Tag zeigt immer
+auf die neueste Version inklusive Testversionen, nach einem stabilen Release
+auf dieselbe wie `latest`. Wer den Schalter wieder ausschaltet, wechselt mit
+dem nächsten stabilen Release per Klick zurück auf `latest`. Mehr als diese
+zwei Kanäle kann die App nicht anfordern: Der Updater nimmt aus der
+Trigger-Datei nur `channel=latest` oder `channel=beta`, eine feste Version
+lässt er stehen. Dafür braucht es die `docker-compose.yml` ab 1.5.0. Bei einer
+älteren erklärt die App auf `/admin`, was zu tun ist (Installer erneut
+ausführen, er übernimmt `.env` und Daten).
+
 ### Backups
 
 Alle Daten liegen in `/opt/gymbro/data` (SQLite-DB, Avatare, Session-Fotos,
@@ -223,23 +250,41 @@ printf '%s\n' "$PIN" | docker compose exec -T wheres-gymbro node scripts/bootstr
 
 Setzt Name/PIN des Admins neu und meldet alle alten Sessions ab.
 
+### Weitere Admins
+
+Der Account aus `ADMIN_USER_ID` ist der **Ur-Admin**: immer Admin, die
+Rechte lassen sich ihm nicht entziehen, und nur er selbst kann ihn
+deaktivieren, löschen oder seine PIN zurücksetzen. Weitere Admins ernennt
+jeder Admin in der App unter Einstellungen → Nutzerverwaltung. Ein
+Bestätigungsfenster listet, was Admins alles dürfen; zum Ernennen tippt man
+den Namen der Person ein. Die Rolle gilt ab dem nächsten Seitenaufruf, ohne
+neue Anmeldung. Wer deaktiviert wird, verliert sie.
+
+Ist gerade kein Admin angemeldet, geht es auch ohne Oberfläche:
+
+```bash
+cd /opt/gymbro
+docker compose exec -T wheres-gymbro node scripts/set-admin.mjs "<Name oder User-ID>" on   # off zum Entziehen
+```
+
 ## Konfiguration (`/opt/gymbro/.env`)
 
 | Variable | Bedeutung |
 |---|---|
 | `APP_DOMAIN` | Domain, unter der die App läuft |
 | `ACME_EMAIL` | Kontakt für Let's Encrypt |
-| `GYMBRO_IMAGE` | Image-Tag. **Für Updates per Klick muss es beweglich sein** (Default `…/gymbro:latest`). Eine feste Version wie `…/gymbro:1.2.0` ist nur für Rollbacks gedacht — dann deaktiviert die App den One-Click-Button und erklärt den manuellen Weg |
+| `GYMBRO_IMAGE` | Image-Tag. **Für Updates per Klick muss es beweglich sein** (Default `…/gymbro:latest`, mit Testversionen `…/gymbro:beta`). Eine feste Version wie `…/gymbro:1.2.0` ist nur für Rollbacks gedacht — dann deaktiviert die App den One-Click-Button und erklärt den manuellen Weg |
 | `SESSION_SECRET` | Signiert Login-Cookies. Ändern = alle ausloggen |
 | `PIN_PEPPER` | Fließt in die PIN-Hashes. **Nie ändern** — sonst funktioniert keine PIN mehr |
 | `CRON_SECRET` | Schützt den internen Reminder-Endpunkt |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | WebPush-Schlüsselpaar |
-| `ADMIN_USER_ID` | User-ID mit Admin-Rechten (Default `gymbro_admin`) |
+| `ADMIN_USER_ID` | User-ID des Ur-Admins (Default `gymbro_admin`). Weitere Admins stehen in der Datenbank, siehe [Weitere Admins](#weitere-admins) |
 | `ANALYTICS_USER_IDS` | Optional: komma-getrennte User-IDs, die zusätzlich die Analytics lesen dürfen — ohne Nutzerverwaltung, Updates, Feature-Schalter und Gyms |
 | `UPDATE_CHECK` | `on` (Default) / `off` — täglicher Release-Check |
 | `UPDATE_REPO` | Repo für den Check (Default `tyl3rde/gymbro`) |
 | `UPDATE_TOKEN` | Optionales GitHub-PAT. Nur nötig, wenn auch das Package privat ist — bei öffentlichem Package findet der Check die Versionen über die Registry |
 | `UPDATER_ENABLED` | `true` = One-Click-Update-Button sichtbar |
+| `UPDATE_PRERELEASES` | `off` (Default) / `on` — Startwert des Prerelease-Schalters auf `/admin`. Der Installer setzt `on`, wenn Beta gewählt wurde. Wer auf `/admin` schaltet, überschreibt ihn |
 | `PROXY_NETWORK` | Nur in der Reverse-Proxy-Variante: Name des bestehenden Docker-Networks (Default `web`) |
 
 **Die `.env` niemals committen oder weitergeben.** Sie ist der Generalschlüssel

@@ -14,10 +14,12 @@
     Referrer-Policy "strict-origin-when-cross-origin"
     X-Frame-Options "DENY"
     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-    # CSP: alles same-origin. unsafe-inline für Theme-Boot-Script + Inline-
-    # Styles (Next.js-Hydration / style={{}}), blob:/data: für Foto-Preview.
-    # frame-ancestors 'none' = moderne Clickjacking-Sperre (wie X-Frame DENY).
-    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+    # CSP nur als Rückfall (?): Die App schickt auf jeder Seite eine strengere
+    # mit Nonce (proxy.js, #44). Ohne ? überschriebe Caddy sie, weil
+    # -Server den ganzen Block erst nach der Antwort der App anwendet.
+    # Greift also nur, wo die App keine CSP mitbringt. Wert wortgleich zu
+    # lib/security-headers.cjs (tests/security-headers.test.js).
+    ?Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
     -Server
   }
 

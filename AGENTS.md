@@ -53,9 +53,11 @@ In dieser Reihenfolge, alle über das Terminal:
 4. **PIN für den Admin**, zweimal (genau 4 Ziffern, verdeckte Eingabe)
 5. **Beta installieren? [j/N]** — nur, wenn es einen Prerelease gibt, der
    neuer ist als die letzte stabile Version. Enter = stabil
-   (`ghcr.io/tyl3rde/gymbro:latest`, Updates per Klick), `j` = der neueste
-   Prerelease als feste Version (kein Update per Klick). Die Versionen liest
-   der Installer anonym aus GHCR; klappt das nicht, nimmt er stabil.
+   (`ghcr.io/tyl3rde/gymbro:latest`, Updates per Klick), `j` = Beta-Kanal
+   (`ghcr.io/tyl3rde/gymbro:beta`, neueste Version inklusive Testversionen)
+   mit eingeschaltetem Prerelease-Schalter, auch die nächsten Betas kommen
+   dann per Klick (abschaltbar auf `/admin`). Die Versionen liest der
+   Installer anonym aus GHCR; klappt das nicht, nimmt er stabil.
    Soll eine bestimmte Version ohne Frage installiert werden:
    `curl … | sudo GYMBRO_IMAGE=ghcr.io/tyl3rde/gymbro:<version> bash`
 6. **Firewall (ufw)** einrichten? Auf einem frischen Server Vorauswahl „Ja",
@@ -121,6 +123,21 @@ Der Installer ist wiederholbar. Er übernimmt die Secrets aus der vorhandenen
 und schreibt Domain, E-Mail und Image neu. Den Admin legt er dabei nicht
 doppelt an: Name und PIN werden aktualisiert, alle bestehenden Sitzungen des
 Admins ungültig.
+
+## Weitere Admins
+
+Der Installer legt genau einen Admin an, den Ur-Admin aus `ADMIN_USER_ID`.
+Er bleibt immer Admin. Weitere Admins ernennt man in der App unter
+Einstellungen → Nutzerverwaltung, oder ohne Oberfläche im Container:
+
+```bash
+cd /opt/gymbro && docker compose exec -T wheres-gymbro node scripts/set-admin.mjs "<Name oder User-ID>" on
+```
+
+`off` entzieht die Rolle wieder. Den Ur-Admin fasst das Skript nicht an; für
+seinen Namen oder seine PIN ist `bootstrap-admin.mjs` da. Nicht
+`bootstrap-admin.mjs` mit einem anderen Namen aufrufen, um „noch einen Admin"
+anzulegen: Das benennt den Ur-Admin um und setzt seine PIN neu.
 
 ## Updates und Versionen
 

@@ -89,20 +89,28 @@ registry_tags() {
     | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
   [ -n "$token" ] || return 1
   curl -fsS --max-time 10 -H "Authorization: Bearer $token" \
-    "https://ghcr.io/v2/tyl3rde/gymbro/tags/list?n=1000" | grep -o '"[0-9][^"]*"' | tr -d '"'
+    "https://ghcr.io/v2/tyl3rde/gymbro/tags/list?n=1000" | grep -oE '"([0-9][^"]*|beta)"' | tr -d '"'
 }
 
-# Stabil (latest) oder Beta (neuester Prerelease)? Setzt GYMBRO_IMAGE.
+# Stabil (latest) oder Beta (neuester Prerelease)? Setzt GYMBRO_IMAGE und
+# UPDATE_PRERELEASES, den Startwert des Prerelease-Schalters auf /admin.
+# Beta heißt: Kanal …:beta (neueste Version inklusive Prereleases) und
+# Schalter an, damit auch die nächsten Betas per Klick kommen. Gibt es das
+# Tag noch nicht (Releases vor 1.4.0), wird wie früher der Prerelease fest
+# eingetragen.
 # Portabel bis Bash 3.2 gehalten, damit tests/install-sh.test.js die
 # Auswahl auch auf einem Mac durchspielen kann.
 choose_image() {
+  UPDATE_PRERELEASES=off
   # Von außen gesetzt (curl … | sudo GYMBRO_IMAGE=…:1.2.0 bash): keine Frage.
   if [ -n "${GYMBRO_IMAGE:-}" ]; then
+    case "$GYMBRO_IMAGE" in *:beta) UPDATE_PRERELEASES=on ;; esac
     ok "Image aus GYMBRO_IMAGE: $GYMBRO_IMAGE"
     return 0
   fi
-  local tags stable beta base answer
+  local tags stable beta base answer channel=0
   tags="$(registry_tags 2>/dev/null || true)"
+  printf '%s\n' "$tags" | grep -qx beta && channel=1
   stable="$(printf '%s\n' "$tags" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
   beta="$(printf '%s\n' "$tags" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+-' | sort -V | tail -1 || true)"
   # Eine Beta nur anbieten, wenn ihre Version NEUER ist als die letzte
@@ -123,10 +131,21 @@ choose_image() {
     echo
     echo "  Stabil: ${stable:-?} — empfohlen, Updates per Klick in der App"
     echo "  Beta:   $beta — neuester Testkandidat, kann Fehler haben."
-    echo "          Feste Version: kein Update per Klick, Wechsel später von Hand."
+    if [ "$channel" = 1 ]; then
+      echo "          Updates per Klick, auch die nächsten Betas (abschaltbar auf /admin)."
+    else
+      echo "          Feste Version: kein Update per Klick, Wechsel später von Hand."
+    fi
     read -rp "Beta installieren? [j/N] " answer || answer=""
     case "$answer" in
-      [jJ]*) GYMBRO_IMAGE="$IMAGE_REPO:$beta" ;;
+      [jJ]*)
+        if [ "$channel" = 1 ]; then
+          GYMBRO_IMAGE="$IMAGE_REPO:beta"
+          UPDATE_PRERELEASES=on
+        else
+          GYMBRO_IMAGE="$IMAGE_REPO:$beta"
+        fi
+        ;;
     esac
   fi
   ok "Image: $GYMBRO_IMAGE"
@@ -178,7 +197,7 @@ if [ -n "$SERVER_IP" ] && [ "$DNS_IP" != "$SERVER_IP" ]; then
   warn "DNS-Check: $DOMAIN zeigt auf '${DNS_IP:-nichts}', dieser Server hat $SERVER_IP."
   warn "Ohne passenden A-Record bekommt Caddy KEIN Zertifikat (TLS schlägt fehl)."
   read -rp "Trotzdem fortfahren? [j/N] " CONT
-  [[ "${CONT,,}" == j* ]] || die "Abgebrochen — erst den A-Record setzen, dann erneut starten."
+  [[ "$CONT" == [jJ]* ]] || die "Abgebrochen — erst den A-Record setzen, dann erneut starten."
 else
   ok "DNS zeigt auf diesen Server ($SERVER_IP)."
 fi
@@ -248,6 +267,7 @@ GYMBRO_DIR=$APP_DIR
 APP_DOMAIN=$DOMAIN
 ACME_EMAIL=$ACME_EMAIL
 GYMBRO_IMAGE=$GYMBRO_IMAGE
+UPDATE_PRERELEASES=$UPDATE_PRERELEASES
 SESSION_SECRET=$SESSION_SECRET
 PIN_PEPPER=$PIN_PEPPER
 CRON_SECRET=$CRON_SECRET
@@ -275,10 +295,10 @@ if command -v ufw >/dev/null; then
     [ "${RUNNING_CONTAINERS:-0}" -gt 0 ] && warn "  • $RUNNING_CONTAINERS Container laufen bereits"
     warn "Ein Einrichten setzt NUR SSH/80/443 frei — anderes könnte abgeschnitten werden."
     read -rp "ufw trotzdem jetzt einrichten? [j/N] " UFW
-    UFW_DO=0; [[ "${UFW,,}" == j* ]] && UFW_DO=1
+    UFW_DO=0; [[ "$UFW" == [jJ]* ]] && UFW_DO=1
   else
     read -rp "ufw-Firewall einrichten (SSH, 80, 443 erlauben + aktivieren)? [J/n] " UFW
-    UFW_DO=1; [[ "${UFW,,}" == n* ]] && UFW_DO=0
+    UFW_DO=1; [[ "$UFW" == [nN]* ]] && UFW_DO=0
   fi
 
   if [ "$UFW_DO" = "1" ]; then
@@ -312,7 +332,7 @@ if ! docker compose pull; then
   warn "     GYMBRO_IMAGE=$DEFAULT_IMAGE (bzw. eine Version >= 1.1.2)"
   echo
   read -rp "Bei GHCR anmelden und erneut versuchen? [J/n] " RETRY
-  if [[ "${RETRY,,}" == n* ]]; then
+  if [[ "$RETRY" == [nN]* ]]; then
     die "Abgebrochen. Bei Ursache 2 hilft ein Anmelden nicht — Tag wechseln."
   fi
   docker login ghcr.io

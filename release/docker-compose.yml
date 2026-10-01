@@ -55,6 +55,10 @@ services:
       # Optionales PAT (Lesezugriff), damit der Release-Check auch bei
       # privatem Repo funktioniert. Leer = nur öffentliche Releases sichtbar.
       - UPDATE_TOKEN=${UPDATE_TOKEN:-}
+      # Startwert des Prerelease-Schalters auf /admin (Standard aus). Der
+      # Installer setzt "on", wenn bei der Installation Beta gewählt wurde.
+      # Danach gilt, was auf /admin eingestellt ist.
+      - UPDATE_PRERELEASES=${UPDATE_PRERELEASES:-off}
       # Sagt der UI, ob der Updater-Sidecar läuft (One-Click-Button sichtbar).
       - UPDATER_ENABLED=${UPDATER_ENABLED:-true}
       # Das eigene Image-Tag: nur so erkennt die App, ob sie auf einer FESTEN
@@ -119,7 +123,10 @@ services:
   # Root-Rechten auf dem Host. Deshalb:
   #   * Er ist der EINZIGE Container mit Socket-Zugriff (die App selbst hat
   #     keinen und kann nur eine Datei schreiben).
-  #   * Er führt nur pull/up aus, nichts aus der Trigger-Datei.
+  #   * Er führt nur pull/up aus. Aus der Trigger-Datei nimmt er höchstens
+  #     eines von zwei festen Wörtern (channel=latest, channel=beta) und
+  #     stellt damit GYMBRO_IMAGE in der .env zwischen …:latest und …:beta
+  #     um. Eine beliebige Version kann die App so nicht anfordern.
   #   * Wer das nicht will: Service löschen und UPDATER_ENABLED=false setzen —
   #     der Update-HINWEIS funktioniert weiter, das Einspielen läuft dann
   #     manuell per SSH (docker compose pull && up -d).
@@ -139,6 +146,15 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${GYMBRO_DIR:-/opt/gymbro}/data/updater:/trigger
       - ${GYMBRO_DIR:-/opt/gymbro}:/workdir:ro
+      # Die .env einzeln beschreibbar, nur für den Kanalwechsel (GYMBRO_IMAGE
+      # zwischen …:latest und …:beta, Prerelease-Schalter auf /admin).
+      # create_host_path: false, sonst legte Docker bei fehlender .env ein
+      # leeres VERZEICHNIS dieses Namens an.
+      - type: bind
+        source: ${GYMBRO_DIR:-/opt/gymbro}/.env
+        target: /workdir/.env
+        bind:
+          create_host_path: false
       # Registry-Login des Hosts (docker login ghcr.io), read-only: ohne ihn
       # könnte der Sidecar ein PRIVATES GHCR-Package nicht pullen — die
       # Credentials liegen beim Compose-CLI-Client, nicht im Docker-Daemon.
@@ -148,14 +164,93 @@ services:
     command:
       - |
         echo "[updater] bereit — warte auf Update-Anfragen"
+        # Sagt der App, dass dieser Updater zwischen stabil und Beta wechseln kann.
+        # Ältere Compose-Dateien kannten nur pull/up, dort bietet die App keinen
+        # Wechsel an.
+        echo "latest beta" > /trigger/channels
+
+        # GYMBRO_IMAGE aus der .env, ohne Anführungszeichen. Fehlt die Zeile, gilt
+        # der Compose-Default.
+        image_aus_env() {
+          bild="$$(sed -n 's/^GYMBRO_IMAGE=//p' /workdir/.env | tail -n 1 | tr -d "\"'\r")"
+          echo "$${bild:-ghcr.io/tyl3rde/gymbro:latest}"
+        }
+
+        # GYMBRO_IMAGE in der .env neu setzen. Die Datei ist einzeln eingehängt, ein
+        # mv ginge nicht, deshalb wird sie überschrieben. Aber erst, wenn die neue
+        # Fassung vollständig ist: keine Zeile weniger und die neue Zeile drin. Eine
+        # kaputte .env legt die ganze Instanz lahm (2026-07-14).
+        env_setzen() {
+          (
+            umask 077
+            {
+              if grep -q '^GYMBRO_IMAGE=' /workdir/.env; then
+                sed "s|^GYMBRO_IMAGE=.*|GYMBRO_IMAGE=$$1|" /workdir/.env
+              else
+                cat /workdir/.env
+                [ -z "$$(tail -c 1 /workdir/.env)" ] || echo
+                echo "GYMBRO_IMAGE=$$1"
+              fi
+            } > /trigger/env.neu
+          ) || { rm -f /trigger/env.neu; return 1; }
+          if [ "$$(wc -l < /trigger/env.neu)" -lt "$$(wc -l < /workdir/.env)" ] \
+            || ! grep -qx "GYMBRO_IMAGE=$$1" /trigger/env.neu; then
+            rm -f /trigger/env.neu
+            return 1
+          fi
+          cat /trigger/env.neu > /workdir/.env
+          rm -f /trigger/env.neu
+        }
+
+        # Kanal umstellen: …:latest ↔ …:beta. Nur, wenn gerade eines dieser beiden
+        # Tags gesetzt ist. Eine feste Version oder ein Digest bleibt, wie sie ist.
+        kanal_setzen() {
+          vorher="$$(image_aus_env)"
+          name="$${vorher##*/}"
+          case "$$name" in
+            *@*) return 0 ;;
+            *:*) repo="$${vorher%:*}"; tag="$${name##*:}" ;;
+            *) repo="$$vorher"; tag=latest ;;
+          esac
+          case "$$tag" in
+            latest|beta) ;;
+            *) echo "[updater] feste Version ($$vorher), Kanal bleibt"; return 0 ;;
+          esac
+          [ "$$repo:$$1" != "$$vorher" ] || return 0
+          env_setzen "$$repo:$$1" || return 1
+          gewechselt="$$vorher"
+          echo "[updater] Kanal: $$vorher → $$repo:$$1"
+        }
+
+        anfrage_bearbeiten() {
+          anfrage="$$(head -c 200 /trigger/update-requested 2>/dev/null | tr '\n' ' ')"
+          rm -f /trigger/update-requested
+          echo "[updater] Anfrage erkannt ($$anfrage)"
+          gewechselt=""
+          # Aus der Datei zählt nur genau eines dieser zwei Wörter, sonst nichts.
+          # Ältere Apps schreiben nur die Zielversion hinein, fürs Log.
+          case "$$anfrage" in
+            "channel=latest "*) kanal=latest ;;
+            "channel=beta "*) kanal=beta ;;
+            *) kanal="" ;;
+          esac
+          if [ -n "$$kanal" ] && ! kanal_setzen "$$kanal"; then
+            echo "[updater] ✗ .env nicht geändert, Update abgebrochen"
+            return 0
+          fi
+          if docker compose pull wheres-gymbro && docker compose up -d wheres-gymbro; then
+            echo "[updater] ✓ Update eingespielt"
+          else
+            echo "[updater] ✗ Update fehlgeschlagen"
+            if [ -n "$$gewechselt" ] && env_setzen "$$gewechselt"; then
+              echo "[updater] Kanal zurück auf $$gewechselt"
+            fi
+          fi
+        }
+
         while :; do
           if [ -f /trigger/update-requested ]; then
-            echo "[updater] Anfrage erkannt ($(cat /trigger/update-requested 2>/dev/null))"
-            rm -f /trigger/update-requested
-            docker compose pull wheres-gymbro \
-              && docker compose up -d wheres-gymbro \
-              && echo "[updater] ✓ Update eingespielt" \
-              || echo "[updater] ✗ Update fehlgeschlagen"
+            anfrage_bearbeiten
           fi
           sleep 15
         done
