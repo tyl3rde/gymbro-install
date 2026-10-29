@@ -7,6 +7,7 @@
 # oder aus einem Checkout heraus: sudo ./install.sh
 #
 # Was er tut (interaktiv, fragt vorher):
+#   0. Lizenz zeigen, ohne Zustimmung Abbruch vor jeder Änderung am System
 #   1. Docker installieren (falls nicht vorhanden)
 #   2. Secrets generieren (Session, Pepper, Cron) + VAPID-Keypair für WebPush
 #   3. /opt/gymbro anlegen: .env, docker-compose.yml, Caddyfile
@@ -28,6 +29,16 @@ DEFAULT_IMAGE="$IMAGE_REPO:latest"
 # die Release-Pipeline bei jedem stabilen Release nach; das App-Repo selbst
 # ist privat und für raw.githubusercontent.com nicht lesbar.
 INSTALL_BASE="${GYMBRO_INSTALL_BASE:-https://raw.githubusercontent.com/tyl3rde/gymbro-install/main}"
+
+# Lizenz, der der Betreiber vor der Installation zustimmt (accept_license).
+# Dieselben Angaben stehen in lib/lizenz.js, die App fragt damit beim ersten
+# Start und vor einem Update. Der Volltext liegt im öffentlichen Repo
+# gymbro-install, weil das App-Repo privat ist. Dorthin spiegelt der Release
+# die LICENSE: Bis zum Release 1.7.0 steht unter der Adresse noch die AGPL.
+LICENSE_NAME="Gymbro Source License"
+LICENSE_VERSION="1.0"
+LICENSE_URL="https://github.com/tyl3rde/gymbro-install/blob/main/LICENSE"
+LICENSE_FILE="license-accepted"
 
 # Aus einem Checkout gestartet (./install.sh) liegt release/ neben dem Skript.
 # Per Pipe gibt es keinen Skriptpfad, dann bleibt RELEASE_DIR leer und main()
@@ -151,11 +162,65 @@ choose_image() {
   ok "Image: $GYMBRO_IMAGE"
 }
 
+# Lizenzabfrage, das Allererste in main(), noch vor dem Root-Check:
+# Kurzfassung, Link zum Volltext, [j/N]. Ohne ausdrückliches Ja (auch bei
+# Enter) bricht der Installer ab, bevor er irgendetwas am System ändert.
+# Ohne Frage geht es nur mit GYMBRO_ACCEPT_LICENSE=<Version>: Wer
+# automatisiert, stimmt damit genau der Fassung zu, die er meint, ein bloßes
+# 1 oder yes reicht nicht. Hier wird nur der Zeitpunkt gemerkt, auf die
+# Platte kommt die Zustimmung mit der .env (save_license_acceptance).
+# Portabel bis Bash 3.2, damit tests/install-sh.test.js sie auf einem Mac
+# durchspielen kann. Die Texte stehen so auch in release/installer.svg.
+accept_license() {
+  local answer
+  echo
+  echo "Where's Gymbro? steht ab Version 1.7.0 unter der $LICENSE_NAME $LICENSE_VERSION."
+  echo "Kurz: Installieren, betreiben und ändern nur zur privaten Nutzung."
+  echo "Keine kommerzielle Nutzung, keine Weitergabe außer an den Lizenzgeber."
+  echo "Volltext: $LICENSE_URL"
+  if [ -n "${GYMBRO_ACCEPT_LICENSE:-}" ]; then
+    [ "$GYMBRO_ACCEPT_LICENSE" = "$LICENSE_VERSION" ] \
+      || die "GYMBRO_ACCEPT_LICENSE=$GYMBRO_ACCEPT_LICENSE passt nicht. Ohne Frage zustimmen geht nur mit der Lizenzversion: GYMBRO_ACCEPT_LICENSE=$LICENSE_VERSION"
+    LICENSE_METHOD="GYMBRO_ACCEPT_LICENSE"
+    ok "Lizenz $LICENSE_VERSION angenommen (GYMBRO_ACCEPT_LICENSE)."
+  else
+    read -rp "Lizenz annehmen? [j/N] " answer || answer=""
+    case "$answer" in
+      j|J|ja|Ja|JA) LICENSE_METHOD="interaktiv" ;;
+      *) die "Lizenz nicht angenommen. Abgebrochen, am System wurde nichts geändert." ;;
+    esac
+    ok "Lizenz $LICENSE_VERSION angenommen."
+  fi
+  LICENSE_ACCEPTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+
+# Nachweis nach $APP_DIR/license-accepted, direkt nach der .env: Zeitpunkt
+# der Zustimmung, Lizenz, Version und Weg. Eine Zeile pro Lauf, frühere
+# bleiben stehen.
+save_license_acceptance() {
+  if [ ! -f "$APP_DIR/$LICENSE_FILE" ]; then
+    printf '# Zustimmung zur Lizenz, eine Zeile pro Installer-Lauf (Tab-getrennt):\n# Zeitpunkt (UTC), Lizenz, Version, Weg\n' > "$APP_DIR/$LICENSE_FILE"
+  fi
+  printf '%s\t%s\t%s\t%s\n' "$LICENSE_ACCEPTED_AT" "$LICENSE_NAME" "$LICENSE_VERSION" "$LICENSE_METHOD" >> "$APP_DIR/$LICENSE_FILE"
+  ok "Lizenzzustimmung gespeichert ($APP_DIR, Version $LICENSE_VERSION + Zeitstempel)."
+}
+
+# Vor dem Pull nur noch prüfen: Steht die Zustimmung zu genau dieser
+# Lizenzversion in $APP_DIR? Fängt ab, dass ein Umbau die Abfrage oder das
+# Speichern übergeht.
+license_accepted() {
+  [ -f "$APP_DIR/$LICENSE_FILE" ] || return 1
+  awk -F '\t' -v name="$LICENSE_NAME" -v version="$LICENSE_VERSION" \
+    '$2 == name && $3 == version { found = 1 } END { exit !found }' "$APP_DIR/$LICENSE_FILE"
+}
+
 # Alles Weitere steckt in main(), aufgerufen erst in der letzten Zeile. Bei
 # `curl … | sudo bash` liest bash das Skript aus der Pipe: So ist es komplett
 # gelesen, bevor irgendetwas läuft (ein abgebrochener Download führt nichts
 # halb aus), und die Fragen können vom Terminal lesen statt aus der Pipe.
 main() {
+# ── 0. Lizenz ────────────────────────────────────────────────────────────────
+accept_license
 [ "$(id -u)" -eq 0 ] || die "Bitte als root ausführen: curl -fsSL …/install.sh | sudo bash (bzw. sudo ./install.sh)"
 command -v curl >/dev/null || { apt-get update -qq && apt-get install -y -qq curl; }
 command -v openssl >/dev/null || { apt-get update -qq && apt-get install -y -qq openssl; }
@@ -278,6 +343,7 @@ COOKIE_SECURE=true
 ADMIN_USER_ID=gymbro_admin
 EOF
 ok ".env geschrieben ($APP_DIR/.env, chmod 600)."
+save_license_acceptance
 
 # ── 5. Firewall (optional) ───────────────────────────────────────────────────
 # Auf einem frischen VPS ist das Einrichten richtig und die Vorauswahl "Ja".
@@ -319,6 +385,8 @@ cd "$APP_DIR"
 # Sonst scheitert unten der Pull, und die Hinweise auf ein privates Package
 # schicken einen auf die falsche Fährte.
 docker compose config -q || die "docker compose kann $APP_DIR/.env oder docker-compose.yml nicht lesen (Meldung oben)."
+license_accepted || die "Keine Zustimmung zur $LICENSE_NAME $LICENSE_VERSION in $APP_DIR/$LICENSE_FILE. Installer neu starten."
+ok "Lizenzzustimmung $LICENSE_VERSION liegt vor."
 say "Ziehe Image $GYMBRO_IMAGE …"
 if ! docker compose pull; then
   # Zwei häufige Ursachen, und sie sehen im Log unterschiedlich aus. Früher
@@ -372,8 +440,15 @@ say "Lege Admin-Account an …"
 # PIN über stdin, nicht als Argument (#45): Argumente sind für jeden Nutzer
 # des Hosts in `ps` sichtbar. Ältere Images (vor der stdin-Unterstützung)
 # kennen nur die Argument-Form — dann bleibt es bei der, mit Hinweis.
+# Die Zustimmung zur Lizenz geht als Env mit: Ab 1.7.0 vermerkt
+# bootstrap-admin sie mit dem Admin in der Datenbank, und die App fragt beim
+# ersten Aufruf von /admin nicht noch einmal. Ältere Images ignorieren sie.
 if docker compose exec -T wheres-gymbro grep -q GYMBRO_BOOTSTRAP_PIN_STDIN scripts/bootstrap-admin.mjs 2>/dev/null; then
-  printf '%s\n' "$ADMIN_PIN" | docker compose exec -T wheres-gymbro node scripts/bootstrap-admin.mjs "$ADMIN_NAME"
+  printf '%s\n' "$ADMIN_PIN" | docker compose exec -T \
+    -e GYMBRO_LICENSE_NAME="$LICENSE_NAME" \
+    -e GYMBRO_LICENSE_VERSION="$LICENSE_VERSION" \
+    -e GYMBRO_LICENSE_ACCEPTED_AT="$LICENSE_ACCEPTED_AT" \
+    wheres-gymbro node scripts/bootstrap-admin.mjs "$ADMIN_NAME"
 else
   warn "Dieses Image kennt die PIN-Übergabe per stdin noch nicht — PIN geht als Argument."
   docker compose exec -T wheres-gymbro node scripts/bootstrap-admin.mjs "$ADMIN_NAME" "$ADMIN_PIN"

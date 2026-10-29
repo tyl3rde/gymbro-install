@@ -43,7 +43,13 @@ Der Installer liegt öffentlich in
 bei jedem stabilen Release aus dem App-Repo nachgezogen. Mit Zugang zum
 App-Repo geht auch `git clone` und dann `sudo ./install.sh` im Checkout.
 
-Das Skript fragt Domain, E-Mail (Let's Encrypt), Admin-Name und Admin-PIN.
+Zuerst zeigt das Skript die Gymbro Source License 1.0 in Kurzfassung mit
+Link zum Volltext und fragt „Lizenz annehmen? [j/N]". Ohne `j` bricht es ab,
+bevor es etwas am System ändert. Ohne Frage geht es nur mit
+`curl … | sudo GYMBRO_ACCEPT_LICENSE=1.0 bash`, also mit der Version der
+Lizenz, der man zustimmt.
+
+Danach fragt das Skript Domain, E-Mail (Let's Encrypt), Admin-Name und Admin-PIN.
 Gibt es eine Testversion, die neuer ist als die letzte stabile, fragt es
 außerdem „Beta installieren? [j/N]" — Enter nimmt die stabile Version
 (`latest`, Updates per Klick), `j` den Beta-Kanal (`…:beta`, neueste Version
@@ -57,9 +63,12 @@ Dann erledigt es:
 2. Secrets erzeugen (Session, PIN-Pepper, Cron) **und ein VAPID-Keypair** für
    Push-Benachrichtigungen
 3. `/opt/gymbro` anlegen: `.env` (chmod 600), `docker-compose.yml`, `Caddyfile`
+   und `license-accepted` (Zustimmung zur Lizenz mit Version und Zeitpunkt)
 4. Optional die Firewall (ufw) einrichten
-5. Image ziehen und starten — Caddy holt das TLS-Zertifikat automatisch
-6. Den Admin-Account anlegen
+5. Zustimmung prüfen, Image ziehen und starten — Caddy holt das
+   TLS-Zertifikat automatisch
+6. Den Admin-Account anlegen und die Zustimmung mit ihm in der Datenbank
+   vermerken (die App fragt dann auf `/admin` nicht noch einmal)
 7. Prüfen, dass `https://<deine-domain>/login` wirklich antwortet
 
 Danach: einloggen, und unter **Einstellungen → Nutzerverwaltung** die übrigen

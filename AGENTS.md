@@ -47,11 +47,16 @@ ersetzen. Für Server mit bestehendem Reverse-Proxy gibt es
 
 In dieser Reihenfolge, alle über das Terminal:
 
-1. **Domain**, z. B. `gymbro.example.de` (nur Buchstaben, Ziffern, `.`, `-`)
-2. **E-Mail für Let's Encrypt** (muss ein `@` enthalten)
-3. **Name des Admin-Accounts** (1–30 Zeichen)
-4. **PIN für den Admin**, zweimal (genau 4 Ziffern, verdeckte Eingabe)
-5. **Beta installieren? [j/N]** — nur, wenn es einen Prerelease gibt, der
+1. **Lizenz annehmen? [j/N]** — als Allererstes, vor jeder Änderung am
+   System: Kurzfassung der Gymbro Source License 1.0 und Link zum Volltext.
+   Enter und alles außer `j`/`ja` bricht ab. Ohne Frage nur mit
+   `curl … | sudo GYMBRO_ACCEPT_LICENSE=1.0 bash` (die Lizenzversion, ein
+   bloßes `1` reicht nicht)
+2. **Domain**, z. B. `gymbro.example.de` (nur Buchstaben, Ziffern, `.`, `-`)
+3. **E-Mail für Let's Encrypt** (muss ein `@` enthalten)
+4. **Name des Admin-Accounts** (1–30 Zeichen)
+5. **PIN für den Admin**, zweimal (genau 4 Ziffern, verdeckte Eingabe)
+6. **Beta installieren? [j/N]** — nur, wenn es einen Prerelease gibt, der
    neuer ist als die letzte stabile Version. Enter = stabil
    (`ghcr.io/tyl3rde/gymbro:latest`, Updates per Klick), `j` = Beta-Kanal
    (`ghcr.io/tyl3rde/gymbro:beta`, neueste Version inklusive Testversionen)
@@ -60,7 +65,7 @@ In dieser Reihenfolge, alle über das Terminal:
    Installer anonym aus GHCR; klappt das nicht, nimmt er stabil.
    Soll eine bestimmte Version ohne Frage installiert werden:
    `curl … | sudo GYMBRO_IMAGE=ghcr.io/tyl3rde/gymbro:<version> bash`
-6. **Firewall (ufw)** einrichten? Auf einem frischen Server Vorauswahl „Ja",
+7. **Firewall (ufw)** einrichten? Auf einem frischen Server Vorauswahl „Ja",
    sonst „Nein"
 
 Stimmt die DNS-Prüfung nicht, fragt er zusätzlich, ob er trotzdem
@@ -70,7 +75,9 @@ weitermachen soll.
 Antworten tippen**, vor allem die PIN. Sie ist das Admin-Passwort der
 Instanz und gehört nicht in deinen Kontext, in Logs oder in eine
 Automatisierung. Ein Agent kann Voraussetzungen prüfen, den Befehl nennen,
-mitlesen und hinterher prüfen.
+mitlesen und hinterher prüfen. Der Lizenz stimmt der Mensch selbst zu, der
+die Instanz betreibt: Beantworte die Frage nicht für ihn und setz
+`GYMBRO_ACCEPT_LICENSE` nicht von dir aus.
 
 Der Installer braucht ein Terminal: Per Pipe gestartet liest er die Fragen
 von `/dev/tty`. Ohne Terminal (CI, Cron, `ssh` ohne `-t`) bricht er mit
@@ -86,6 +93,9 @@ Secrets auszugeben.
 - `/opt/gymbro/.env` — Secrets (Session, PIN-Pepper, Cron, VAPID), Domain,
   Image. Rechte 600. **Nie ausgeben oder weitergeben.**
 - `/opt/gymbro/docker-compose.yml`, `/opt/gymbro/Caddyfile`
+- `/opt/gymbro/license-accepted` — Nachweis der Zustimmung zur Lizenz, eine
+  Zeile pro Installer-Lauf (Zeitpunkt UTC, Lizenz, Version, Weg). Nicht
+  löschen; die App vermerkt dieselbe Zustimmung beim Admin in der Datenbank.
 - `/opt/gymbro/data/` — Datenbank, Fotos, tägliche Backups. Gehört uid 1000,
   weil die App im Container als Nutzer `node` (uid 1000) läuft.
 - Container `gymbro-wheres-gymbro-1` (App), `gymbro-caddy-1` (HTTPS),
