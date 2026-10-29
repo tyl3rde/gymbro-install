@@ -14,6 +14,9 @@ fragt er zusätzlich, ob er statt der stabilen Version die Beta nehmen soll
 (Enter = stabil). Nach etwa fünf Minuten läuft die App unter
 `https://<deine-domain>`.
 
+<!-- Erzeugt mit svg-builder aus specs/gymbro-install.json, nicht von Hand ändern. -->
+<img src="installer.svg" alt="Alle Schritte des Installers: Start, Docker, Fragen, DNS-Check, Secrets, Firewall, Container, Admin und HTTPS-Prüfung" width="100%">
+
 ## Voraussetzungen
 
 - Ubuntu 24.04 oder Debian 12, amd64 oder arm64, ab 2 GB RAM

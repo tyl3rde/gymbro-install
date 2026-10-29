@@ -286,6 +286,38 @@ docker compose exec -T wheres-gymbro node scripts/set-admin.mjs "<Name oder User
 | `UPDATER_ENABLED` | `true` = One-Click-Update-Button sichtbar |
 | `UPDATE_PRERELEASES` | `off` (Default) / `on` — Startwert des Prerelease-Schalters auf `/admin`. Der Installer setzt `on`, wenn Beta gewählt wurde. Wer auf `/admin` schaltet, überschreibt ihn |
 | `PROXY_NETWORK` | Nur in der Reverse-Proxy-Variante: Name des bestehenden Docker-Networks (Default `web`) |
+| `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` | Optional: eigene Strava-API-App für die Strava-Anbindung, siehe [Strava](#strava-optional) |
+
+### Strava (optional)
+
+Mit dem Feature „Strava“ (Schalter auf `/admin`, standardmäßig aus) verbindet
+jede Person ihr Strava-Konto und bekommt nach einer Aktivität einen
+vorausgefüllten Check-in. Dafür braucht jede Instanz eine **eigene**
+Strava-API-App:
+
+1. Unter <https://www.strava.com/settings/api> eine App anlegen (Strava
+   verlangt dafür ein Abo). Als „Authorization Callback Domain“ die Domain
+   der Instanz eintragen, ohne `https://`.
+2. Client-ID und Client-Secret als `STRAVA_CLIENT_ID` und
+   `STRAVA_CLIENT_SECRET` in die `.env` schreiben. Eine Installation von vor
+   1.6.0 hat eine `docker-compose.yml`, die die beiden nicht an die App
+   weiterreicht (ein Update per Klick tauscht nur die App). Dann unter
+   `environment:` des Dienstes `wheres-gymbro` zwei Zeilen ergänzen:
+
+   ```yaml
+         - STRAVA_CLIENT_ID=${STRAVA_CLIENT_ID:-}
+         - STRAVA_CLIENT_SECRET=${STRAVA_CLIENT_SECRET:-}
+   ```
+
+   Danach `docker compose up -d`.
+3. Auf `/admin` das Feature einschalten und unter „Strava“ den Webhook
+   anmelden. Ohne Webhook holt die App neue Aktivitäten beim Öffnen der
+   Startseite, höchstens alle 10 Minuten.
+
+Neue Strava-Apps erlauben erst nur das eigene Konto. In den API-Einstellungen
+lässt sich das ohne Prüfung auf 10 Personen erhöhen, darüber prüft Strava die
+App. Nach den Strava-Bedingungen zeigt die App Strava-Daten nur der Person
+selbst; erst was sie im Check-in abschickt, sieht die Crew.
 
 **Die `.env` niemals committen oder weitergeben.** Sie ist der Generalschlüssel
 der Instanz.

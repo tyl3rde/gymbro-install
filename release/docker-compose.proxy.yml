@@ -52,6 +52,9 @@ services:
       # Wer zusätzlich die Analytics lesen darf (komma-getrennte User-IDs),
       # ohne Admin zu sein. Leer = nur der Admin.
       - ANALYTICS_USER_IDS=${ANALYTICS_USER_IDS:-}
+      # Strava-Anbindung (optional, Feature „Strava“ auf /admin): eigene API-App pro Instanz.
+      - STRAVA_CLIENT_ID=${STRAVA_CLIENT_ID:-}
+      - STRAVA_CLIENT_SECRET=${STRAVA_CLIENT_SECRET:-}
       - UPDATE_CHECK=${UPDATE_CHECK:-on}
       - UPDATE_REPO=${UPDATE_REPO:-tyl3rde/gymbro}
       - UPDATE_TOKEN=${UPDATE_TOKEN:-}
@@ -76,7 +79,7 @@ services:
   # Stündlicher Tick: Reminder-Pushes, Anklage-Verurteilungen, Auto-Close und
   # das tägliche DB-Backup. Jede Aufgabe gated sich selbst, stündlich ist gewollt.
   cron:
-    image: curlimages/curl:8.11.1
+    image: curlimages/curl:8.23.0
     restart: unless-stopped
     logging: *default-logging
     environment:
@@ -99,7 +102,7 @@ services:
   # in der .env umstellen), sonst nichts. Details in docker-compose.yml.
   # Wer das nicht will: Service löschen und UPDATER_ENABLED=false setzen.
   updater:
-    image: docker:27-cli
+    image: docker:29-cli
     restart: unless-stopped
     logging: *default-logging
     volumes:
