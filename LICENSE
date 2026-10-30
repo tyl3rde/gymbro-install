@@ -1,0 +1,152 @@
+Gymbro Source License 1.0
+Deutsche Fassung (maßgeblich)
+
+Copyright © 2025–2026 Tyler (GitHub: tyl3rde). Alle Rechte vorbehalten,
+soweit sie nicht unten ausdrücklich eingeräumt werden.
+
+1. Begriffe
+
+- Software: „Where's Gymbro?“ einschließlich Quellcode, Docker-Images,
+  Installer, Grafiken und Dokumentation, soweit sie vom Lizenzgeber stammen.
+- Lizenzgeber: Tyler (tyl3rde).
+- Geänderte Fassung: jede Bearbeitung der Software oder eines Teils davon.
+- Private Nutzung: Nutzung durch natürliche Personen für eigene,
+  nicht kommerzielle Zwecke, auch zusammen mit einem privaten Kreis
+  (Freunde, Familie, Trainingsgruppe), solange niemand dafür Geld oder
+  einen geldwerten Vorteil erhält oder zahlt.
+
+2. Was erlaubt ist
+
+Der Lizenzgeber räumt dir ein einfaches, nicht übertragbares, unentgeltliches
+und widerrufliches Recht ein, die Software ausschließlich zur privaten Nutzung
+
+1. auszuführen und eine eigene Instanz zu betreiben und
+2. zu ändern.
+
+3. Was nicht erlaubt ist
+
+1. Kommerzielle Nutzung: Verkauf, Vermietung, Betrieb als Dienst gegen
+   Entgelt oder mit Werbung, Einsatz in oder für ein Unternehmen.
+2. Weitergabe: Die Software oder geänderte Fassungen dürfen nicht an
+   Dritte weitergegeben oder öffentlich zugänglich gemacht werden, weder als
+   Quellcode noch als Paket, Image, Binärdatei oder öffentlicher Fork,
+   außer nach Ziffer 4.
+3. Patente: Patentanmeldungen, die die Software, Teile davon oder
+   geänderte Fassungen beanspruchen oder auf ihnen beruhen.
+4. Hinweise: Urheber-, Marken- und Lizenzhinweise dürfen nicht entfernt
+   oder verändert werden.
+
+4. Erlaubte Weitergabe
+
+1. Beiträge an den Lizenzgeber: Du darfst geänderte Fassungen an den
+   Lizenzgeber geben, etwa als Pull Request. Damit räumst du ihm an deinem
+   Beitrag ein einfaches, zeitlich und räumlich unbeschränktes,
+   unwiderrufliches und unentgeltliches Recht ein, ihn in jeder Form zu
+   nutzen, zu ändern, zu verbreiten und unter beliebigen Bedingungen zu
+   lizenzieren, auch kommerziell.
+2. Betrieb über ein Netzwerk: Stellst du eine geänderte Fassung anderen
+   Personen über ein Netzwerk zur Nutzung bereit, musst du diesen Personen
+   den vollständigen Quellcode dieser geänderten Fassung zugänglich machen,
+   ausschließlich unter dieser Lizenz und ohne zusätzliche Einschränkungen.
+3. Jede Weitergabe nach dieser Ziffer erfolgt nur unter dieser Lizenz. Der
+   Lizenztext und alle Hinweise sind beizufügen. Empfänger erhalten keine
+   weitergehenden Rechte als nach dieser Lizenz.
+
+5. Patente und Vorbehalt
+
+1. Diese Lizenz räumt keine Rechte an Patenten des Lizenzgebers ein.
+2. Alle nicht ausdrücklich eingeräumten Rechte bleiben beim Lizenzgeber,
+   insbesondere kommerzielle Nutzung, Verbreitung und Patentverwertung.
+   Andere Lizenzen gibt es auf Anfrage beim Lizenzgeber.
+
+6. Gewährleistung und Haftung
+
+1. Die Software wird unentgeltlich und so, wie sie ist, überlassen. Eine
+   Gewährleistung ist ausgeschlossen, soweit das Gesetz es zulässt.
+2. Die Haftung des Lizenzgebers ist ausgeschlossen, soweit das Gesetz es
+   zulässt. Unberührt bleibt die Haftung für Vorsatz und grobe
+   Fahrlässigkeit, für arglistig verschwiegene Mängel, für Schäden aus der
+   Verletzung des Lebens, des Körpers oder der Gesundheit und nach dem
+   Produkthaftungsgesetz.
+
+7. Ende der Lizenz
+
+1. Bei einem Verstoß gegen diese Lizenz endet dein Nutzungsrecht
+   automatisch.
+2. Es endet ebenso, wenn du Patentansprüche, die die Software betreffen,
+   gegen den Lizenzgeber geltend machst.
+3. Nach dem Ende musst du die Nutzung einstellen. Ziffer 4.1 (Rechte an
+   Beiträgen) gilt fort.
+
+8. Fremdbestandteile
+
+Bestandteile Dritter (Bibliotheken, Schriften, Daten) unterliegen ihren
+eigenen Lizenzen, siehe THIRD-PARTY-NOTICES. Diese Lizenz schränkt die
+Rechte daran nicht ein.
+
+9. Frühere Versionen
+
+Versionen bis einschließlich 1.6.0 wurden unter der GNU Affero General
+Public License 3.0 veröffentlicht und bleiben für diese Versionen unter
+der AGPL. Diese Lizenz gilt ab Version 1.7.0.
+
+10. Schlussbestimmungen
+
+1. Es gilt deutsches Recht unter Ausschluss des UN-Kaufrechts.
+2. Ist eine Bestimmung unwirksam, bleiben die übrigen wirksam.
+3. Die deutsche Fassung ist maßgeblich, die englische dient der Information.
+
+
+========================================================================
+
+Gymbro Source License 1.0
+English version (for information only)
+
+Copyright © 2025–2026 Tyler (GitHub: tyl3rde). All rights reserved except
+as expressly granted below.
+
+1. Definitions. *Software*: "Where's Gymbro?" including source code,
+   Docker images, installer, graphics and documentation by the licensor.
+   *Licensor*: Tyler (tyl3rde). *Modified version*: any adaptation of the
+   Software or part of it. *Private use*: use by natural persons for their
+   own non-commercial purposes, including within a private circle (friends,
+   family, a training group), as long as nobody pays or receives money or
+   anything of monetary value for it.
+2. Permitted. A simple, non-transferable, free and revocable licence to
+   run the Software, operate your own instance, and modify it, for private
+   use only.
+3. Not permitted. (1) Commercial use, including selling, renting,
+   operating it as a paid or ad-funded service, or use in or for a
+   business. (2) Distributing or publishing the Software or modified
+   versions to third parties in any form (source, package, image, binary,
+   public fork), except under section 4. (3) Filing patent applications
+   that claim or are based on the Software, parts of it or modified
+   versions. (4) Removing or altering copyright, trademark or licence
+   notices.
+4. Permitted sharing. (1) *Contributions to the licensor* (e.g. pull
+   requests) are allowed; you grant the licensor a perpetual, worldwide,
+   irrevocable, free licence to use, modify, distribute and relicense your
+   contribution under any terms, including commercially. (2) *Network use*:
+   if you make a modified version available to other people over a
+   network, you must make the complete source code of that modified version
+   available to them, only under this licence and without further
+   restrictions. (3) Any sharing under this section is only under this
+   licence, with the licence text and all notices included.
+5. Patents and reservation. No rights in any patents of the licensor
+   are granted. All rights not expressly granted remain with the licensor,
+   in particular commercial use, distribution and patent exploitation.
+6. No warranty, limited liability. Provided free of charge and as is,
+   without warranty to the extent permitted by law. Liability is excluded
+   to the extent permitted by law; liability for intent, gross negligence,
+   fraudulently concealed defects, injury to life, body or health, and under
+   the German Product Liability Act remains unaffected.
+7. Termination. Any breach, or asserting patent claims concerning the
+   Software against the licensor, terminates your licence automatically.
+   Section 4(1) survives.
+8. Third-party components remain under their own licences (see
+   THIRD-PARTY-NOTICES).
+9. Earlier versions up to and including 1.6.0 were released under the
+   GNU AGPL 3.0 and remain so. This licence applies from version 1.7.0.
+10. Final provisions. German law applies, excluding the UN Convention
+    on Contracts for the International Sale of Goods. Invalid provisions do
+    not affect the rest. The German version prevails.
